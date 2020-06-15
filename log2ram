@@ -11,14 +11,17 @@ isSafe () {
 }
 
 remountRW() {
-    touch $HDD_LOG/$$ 2>/dev/null >/dev/null
-    RESU=$?
-    INITIAL_STATUS=ro
-    if  [ "$RESU" != "0" ] ; then
-	mount -o remount,rw ${HDD_LOG}
-    else
-	INITIAL_STATUS=rw
-	rm $HDD_LOG/$$ 2>/dev/null
+    INITIAL_STATUS=rw
+    if [ -d $HDD_LOG ] ; then
+	HDD_DIR_NAME=$(echo ${HDD_LOG%/*} )
+	OPTIONS=$(findmnt -T $HDD_DIR_NAME --noheadings --raw --first-only -o OPTIONS )
+	IS_RO=${OPTIONS/?(*,)ro?(,*)/ro} 
+    	if  [ "$IS_RO" == "ro" ] ; then
+	   mount -o remount,rw ${HDD_LOG}
+	   INITIAL_STATUS=ro
+    	else
+	   INITIAL_STATUS=rw
+        fi
     fi
     # for return
     echo $INITIAL_STATUS
@@ -26,7 +29,9 @@ remountRW() {
 
 remountOriginal() {
     OPTION=$1
-    mount -o remount,${OPTION} ${HDD_LOG}
+    if [ "$OPTION" == 'ro' ] ;  then
+	mount -o remount,ro ${HDD_LOG}
+    fi
 }
 
 syncToDisk () {
@@ -93,12 +98,15 @@ make_log_dir () {
 	if [ ! -d $HDD_LOG/ ] ; then
 	   mkdir $HDD_LOG/ 2>/dev/null /dev/null
 	   RESU=$?
-	   if [ "$RESU" -ne "0" ] ; then
-		MOUNT_POINT=$(findmnt -T ` dirname $HDD_LOG/ ` -n --raw | cut -d ' ' -f 1 )
-		mount -o remount,rw ${MOUNT_POINT}
-		sleep 0.1
-		mkdir $HDD_LOG/
-		mount -o remount,ro ${MOUNT_POINT}
+	   if [ "$RESU" != "0" ] ; then
+		HDD_DIR_NAME=$(echo ${HDD_LOG%/*} )
+		MOUNT_POINT=$(findmnt -T $HDD_DIR_NAME --noheadings --raw --first-only -o TARGET )
+		if [ ! -z "$MOUNT_POINT" ] ; then
+			mount -o remount,rw ${MOUNT_POINT}
+			sleep 0.1
+			mkdir $HDD_LOG/
+			mount -o remount,ro ${MOUNT_POINT}
+		fi
 	   fi
      fi
 }
@@ -112,11 +120,13 @@ case "$1" in
             RAM_LOG=$i
             HDD_LOG=$PATH_FIRST_PART/hdd.$PATH_LAST_PART
             LOG2RAM_LOG="${RAM_LOG}/${LOG_NAME}"
+
 	    make_log_dir
+
 	    mount --bind $RAM_LOG/ $HDD_LOG/
             mount --make-private $HDD_LOG/
             wait_for $HDD_LOG
-
+        
             if [ "$ZL2R" = true ]; then
                 createZramLogDrive
                 mount -t ext4 -o nosuid,noexec,noatime,nodev,user=log2ram /dev/zram${RAM_DEV} ${RAM_LOG}/
