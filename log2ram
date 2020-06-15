@@ -96,7 +96,7 @@ make_log_dir () {
 	# if create mount failed, try to remount in rw the parent directory
 	# and restore original status
 	if [ ! -d $HDD_LOG/ ] ; then
-	   mkdir $HDD_LOG/ 2>/dev/null /dev/null
+	   mkdir $HDD_LOG/ 2>/dev/null > /dev/null
 	   RESU=$?
 	   if [ "$RESU" != "0" ] ; then
 		HDD_DIR_NAME=$(echo ${HDD_LOG%/*} )
